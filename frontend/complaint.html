@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Complaint - CityPulse AI</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="logo-icon">🏙️</span>
+                <span class="brand-name">CityPulse AI</span>
+            </div>
+            <div class="nav-user">
+                <span id="userName"></span>
+                <button onclick="logout()" class="btn-logout">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="content-grid">
+            <!-- Complaint Form -->
+            <div class="complaint-section">
+                <div class="card">
+                    <h2>Submit Civic Complaint</h2>
+                    
+                    <form id="complaintForm" onsubmit="submitComplaint(event)">
+                        <div class="form-group">
+                            <label>Category (Optional - AI will detect)</label>
+                            <select id="category" onchange="loadFollowupQuestions()">
+                                <option value="other">Auto-detect by AI</option>
+                                <option value="garbage">🗑️ Garbage & Sanitation</option>
+                                <option value="roads">🛣️ Roads & Potholes</option>
+                                <option value="water">💧 Water Supply</option>
+                                <option value="electricity">⚡ Electricity</option>
+                                <option value="streetlight">💡 Street Lights</option>
+                                <option value="parks">🌳 Parks & Gardens</option>
+                                <option value="noise">🔊 Noise Pollution</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Complaint Description *</label>
+                            <textarea id="description" rows="4" placeholder="Describe the issue in detail..." required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Location / Address *</label>
+                            <input type="text" id="location" placeholder="Enter exact location" required>
+                        </div>
+
+                        <div id="followupQuestions"></div>
+
+                        <div class="form-group">
+                            <label>Upload Image (Optional)</label>
+                            <input type="file" id="image" accept="image/*">
+                            <div class="upload-hint">AI will validate if image matches your complaint</div>
+                        </div>
+
+                        <button type="submit" class="btn-primary btn-lg" id="submitBtn">
+                            🤖 Submit & Analyze with AI
+                        </button>
+                    </form>
+                </div>
+
+                <!-- AI Analysis Result -->
+                <div id="aiResult" class="card ai-result" style="display: none;">
+                    <h3>✨ AI Analysis Complete</h3>
+                    <div id="aiAnalysisContent"></div>
+                    <button onclick="resetForm()" class="btn-secondary">Submit Another Complaint</button>
+                </div>
+            </div>
+
+            <!-- Recent Complaints Sidebar -->
+            <div class="sidebar">
+                <div class="card">
+                    <h3>Recent Complaints</h3>
+                    <div id="recentComplaints"></div>
+                </div>
+
+                <div class="card info-card">
+                    <h4>How it works</h4>
+                    <ol>
+                        <li>Submit your complaint with details</li>
+                        <li>AI analyzes and prioritizes instantly</li>
+                        <li>Complaint routed to right department</li>
+                        <li>Track resolution in real-time</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Check authentication
+        if (!localStorage.getItem('userToken')) {
+            window.location.href = 'login.html';
+        }
+
+        document.getElementById('userName').textContent = localStorage.getItem('userName') || 'Citizen';
+
+        async function loadFollowupQuestions() {
+            const category = document.getElementById('category').value;
+            const container = document.getElementById('followupQuestions');
+            
+            if (category === 'other') {
+                container.innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/get-followup-questions?category=${category}`);
+                const data = await response.json();
+                
+                if (data.questions && data.questions.length > 0) {
+                    container.innerHTML = '<div class="followup-section"><h4>📋 Additional Details (helps AI prioritize better)</h4></div>';
+                    
+                    data.questions.forEach((q, index) => {
+                        const questionDiv = document.createElement('div');
+                        questionDiv.className = 'form-group followup-question';
+                        
+                        let inputHtml = '';
+                        if (q.type === 'boolean') {
+                            inputHtml = `
+                                <select id="fq_${index}" class="followup-input">
+                                    <option value="">Select</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
+                            `;
+                        } else if (q.type === 'select' && q.options) {
+                            inputHtml = `<select id="fq_${index}" class="followup-input">
+                                <option value="">Select</option>
+                                ${q.options.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                            </select>`;
+                        } else if (q.type === 'number') {
+                            inputHtml = `<input type="number" id="fq_${index}" class="followup-input" placeholder="Enter number">`;
+                        } else {
+                            inputHtml = `<input type="text" id="fq_${index}" class="followup-input" placeholder="Your answer">`;
+                        }
+                        
+                        questionDiv.innerHTML = `
+                            <label>${q.q}</label>
+                            ${inputHtml}
+                        `;
+                        
+                        container.appendChild(questionDiv);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading questions:', error);
+            }
+        }
+
+        async function submitComplaint(event) {
+            event.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = '🤖 AI Analyzing...';
+
+            const formData = new FormData();
+            formData.append('description', document.getElementById('description').value);
+            formData.append('location', document.getElementById('location').value);
+            formData.append('category', document.getElementById('category').value);
+            formData.append('citizenMobile', localStorage.getItem('userMobile'));
+            formData.append('citizenName', localStorage.getItem('userName'));
+
+            // Collect followup answers
+            const additionalAnswers = {};
+            document.querySelectorAll('.followup-input').forEach((input, idx) => {
+                if (input.value) {
+                    additionalAnswers[`question_${idx}`] = input.value;
+                }
+            });
+            formData.append('additionalAnswers', JSON.stringify(additionalAnswers));
+
+            const imageInput = document.getElementById('image');
+            if (imageInput.files.length > 0) {
+                formData.append('image', imageInput.files[0]);
+            }
+
+            try {
+                const response = await fetch('/api/submit-complaint', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAIResult(data);
+                    loadRecentComplaints();
+                } else {
+                    alert('Error: ' + (data.detail || 'Failed to submit complaint'));
+                }
+            } catch (error) {
+                alert('Error submitting complaint: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🤖 Submit & Analyze with AI';
+            }
+        }
+
+        function showAIResult(data) {
+            const analysis = data.aiAnalysis;
+            const imageValidation = data.imageValidation;
+            
+            let html = `
+                <div class="ai-metrics">
+                    <div class="metric">
+                        <div class="metric-label">Category</div>
+                        <div class="metric-value">${getCategoryEmoji(analysis.category)} ${analysis.category.toUpperCase()}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Priority</div>
+                        <div class="metric-value priority-${analysis.priority}">${analysis.priority.toUpperCase()}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Priority Score</div>
+                        <div class="metric-value">${analysis.priorityScore}/100</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Estimated Impact</div>
+                        <div class="metric-value">${analysis.estimatedImpact} citizens</div>
+                    </div>
+                </div>
+
+                <div class="ai-details">
+                    <p><strong>Complaint ID:</strong> ${data.complaintId}</p>
+                    <p><strong>Severity:</strong> ${analysis.severity}</p>
+                    <p><strong>Cluster:</strong> ${analysis.cluster}</p>
+                    <p><strong>Department:</strong> ${analysis.suggestedDepartment || 'Municipal Office'}</p>
+                    <p><strong>Est. Resolution:</strong> ${analysis.estimatedResolutionTime || '3-5 days'}</p>
+                </div>
+            `;
+
+            if (imageValidation) {
+                const validClass = imageValidation.matchesCategory ? 'success' : 'warning';
+                html += `
+                    <div class="image-validation ${validClass}">
+                        <h4>📸 Image Validation</h4>
+                        <p>${imageValidation.summary}</p>
+                        <p>Confidence: ${imageValidation.confidence}%</p>
+                        ${imageValidation.warning ? `<p class="warning-text">⚠️ ${imageValidation.warning}</p>` : ''}
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="ai-message">
+                    <h4>💬 AI Response</h4>
+                    <p>${analysis.aiMessage}</p>
+                </div>
+            `;
+
+            document.getElementById('aiAnalysisContent').innerHTML = html;
+            document.getElementById('aiResult').style.display = 'block';
+            document.getElementById('complaintForm').style.display = 'none';
+        }
+
+        function getCategoryEmoji(category) {
+            const emojis = {
+                garbage: '🗑️', roads: '🛣️', water: '💧', electricity: '⚡',
+                streetlight: '💡', parks: '🌳', noise: '🔊'
+            };
+            return emojis[category] || '📋';
+        }
+
+        function resetForm() {
+            document.getElementById('complaintForm').reset();
+            document.getElementById('complaintForm').style.display = 'block';
+            document.getElementById('aiResult').style.display = 'none';
+            document.getElementById('followupQuestions').innerHTML = '';
+        }
+
+        async function loadRecentComplaints() {
+            try {
+                const response = await fetch('/api/recent-complaints?limit=5');
+                const data = await response.json();
+                
+                const container = document.getElementById('recentComplaints');
+                
+                if (data.complaints.length === 0) {
+                    container.innerHTML = '<p class="no-data">No recent complaints</p>';
+                    return;
+                }
+
+                container.innerHTML = data.complaints.map(c => `
+                    <div class="recent-item">
+                        <div class="recent-category">${getCategoryEmoji(c.category)} ${c.category}</div>
+                        <div class="recent-desc">${c.description.substring(0, 60)}...</div>
+                        <div class="recent-meta">
+                            <span class="status-badge status-${c.status}">${c.status}</span>
+                            <span>${new Date(c.timestamp || c.created_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading recent complaints:', error);
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        // Load recent complaints on page load
+        loadRecentComplaints();
+    </script>
+</body>
+</html>

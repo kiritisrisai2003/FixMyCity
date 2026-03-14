@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityPulse AI - Citizen Login</title>
+    <link rel="stylesheet" href="/frontend/styles.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <div class="logo-icon">🏙️</div>
+                <h1>CityPulse AI</h1>
+                <p class="tagline">Intelligent Civic Complaint Management</p>
+            </div>
+
+            <div class="login-form" id="loginForm">
+                <h2>Citizen Login</h2>
+                
+                <div class="form-group">
+                    <label for="mobile">Mobile Number</label>
+                    <input type="tel" id="mobile" placeholder="Enter 10-digit mobile number" maxlength="10" required>
+                </div>
+
+                <div class="form-group" id="nameGroup" style="display: none;">
+                    <label for="name">Your Name</label>
+                    <input type="text" id="name" placeholder="Enter your name">
+                </div>
+
+                <div class="form-group" id="otpGroup" style="display: none;">
+                    <label for="otp">Enter OTP</label>
+                    <input type="text" id="otp" placeholder="4-digit OTP" maxlength="4">
+                    <div class="otp-display" id="otpDisplay"></div>
+                </div>
+
+                <button class="btn-primary" id="loginBtn" onclick="handleLogin()">
+                    Send OTP
+                </button>
+
+                <div class="admin-link">
+                    <a href="dashboard.html">Admin Dashboard →</a>
+                </div>
+            </div>
+
+            <div class="features">
+                <div class="feature">
+                    <span class="feature-icon">🤖</span>
+                    <span>AI-Powered Analysis</span>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">⚡</span>
+                    <span>Priority Routing</span>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">📊</span>
+                    <span>Real-time Tracking</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let otpSent = false;
+        let generatedOTP = null;
+
+        async function handleLogin() {
+            const mobile = document.getElementById('mobile').value;
+            const name = document.getElementById('name').value;
+            const otp = document.getElementById('otp').value;
+            const btn = document.getElementById('loginBtn');
+
+            if (!mobile || mobile.length !== 10) {
+                alert('Please enter a valid 10-digit mobile number');
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Processing...';
+
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        mobile, 
+                        otp: otpSent ? otp : null 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!otpSent) {
+                    // OTP sent
+                    otpSent = true;
+                    generatedOTP = data.otp;
+                    
+                    document.getElementById('nameGroup').style.display = 'block';
+                    document.getElementById('otpGroup').style.display = 'block';
+                    document.getElementById('otpDisplay').textContent = `Demo OTP: ${data.otp}`;
+                    document.getElementById('otpDisplay').style.display = 'block';
+                    
+                    btn.textContent = 'Verify & Login';
+                    btn.disabled = false;
+                    
+                    document.getElementById('otp').focus();
+                } else {
+                    // OTP verified
+                    if (!name) {
+                        alert('Please enter your name');
+                        btn.disabled = false;
+                        btn.textContent = 'Verify & Login';
+                        return;
+                    }
+
+                    localStorage.setItem('userToken', data.token);
+                    localStorage.setItem('userMobile', mobile);
+                    localStorage.setItem('userName', name);
+                    
+                    window.location.href = '/frontend/complaint.html';
+                }
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = otpSent ? 'Verify & Login' : 'Send OTP';
+            }
+        }
+
+        // Enter key support
+        document.addEventListener('DOMContentLoaded', () => {
+            ['mobile', 'name', 'otp'].forEach(id => {
+                document.getElementById(id).addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleLogin();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
